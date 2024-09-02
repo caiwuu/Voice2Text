@@ -6,47 +6,92 @@ import threading
 import queue
 import gradio as gr
 import av
+import subprocess
+def check_cuda_available():
+    try:
+        result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("CUDA is available.")
+            return True
+        else:
+            print("CUDA is not available.")
+            return False
+    except FileNotFoundError:
+        print("CUDA is not available.")
+        return False
 
 
+
+cuda_available = check_cuda_available()
 # 加载模型
 path = "./models/faster-whisper-large-v2"
-model = WhisperModel(model_size_or_path=path, device="cuda", compute_type="float16")
-
+model = WhisperModel(model_size_or_path=path, device="cuda", compute_type="float16") if cuda_available else WhisperModel(model_size_or_path=path, device="cpu", compute_type="int8")
 # 初始化参数
 channels = 1
 sampling_rate = 48000
 duration = 10  # 定义录音时长
 recording = False
-
-
+audio_file = None
+audio_stream_data = None
+data_queue = queue.Queue()
 total_frames = np.array([], dtype=np.float32)
 vad_parameters = VadOptions(max_speech_duration_s=float(5))
-resArr = []
+text_arr = []
+beam_size = 5
+language = "zh"
+is_subtitles = True,
+language_arr = ["af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo", "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw", "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja", "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo", "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt", "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq", "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yi", "yo", "zh", "zh-TW"]
+language_label = ["南非荷兰语", "阿姆哈拉语", "阿拉伯语", "阿萨姆语", "阿塞拜疆语", "巴什基尔语", "白俄罗斯语", "保加利亚语", "孟加拉语", "藏语", "布列塔尼语", "波斯尼亚语", "加泰罗尼亚语", "捷克语", "威尔士语", "丹麦语", "德语", "希腊语", "英语", "西班牙语", "爱沙尼亚语", "巴斯克语", "波斯语", "芬兰语", "法罗语", "法语", "加利西亚语", "古吉拉特语", "豪萨语", "夏威夷语", "希伯来语", "印地语", "克罗地亚语", "海地克里奥尔语", "匈牙利语", "亚美尼亚语", "印度尼西亚语", "冰岛语", "意大利语", "日语", "爪哇语", "格鲁吉亚语", "哈萨克语", "高棉语", "卡纳达语", "韩语", "拉丁语", "卢森堡语", "林加拉语", "老挝语", "立陶宛语", "拉脱维亚语", "马达加斯加语", "毛利语", "马其顿语", "马拉雅拉姆语", "蒙古语", "马拉地语", "马来语", "马耳他语", "缅甸语", "尼泊尔语", "荷兰语", "挪威语（新挪威语）", "挪威语", "奥克西唐语", "旁遮普语", "波兰语", "普什图语", "葡萄牙语", "罗马尼亚语", "俄语", "梵语", "信德语", "僧伽罗语", "斯洛伐克语", "斯洛文尼亚语", "修纳语", "索马里语", "阿尔巴尼亚语", "塞尔维亚语", "巽他语", "瑞典语", "斯瓦希里语", "泰米尔语", "泰卢固语", "塔吉克语", "泰语", "土库曼语", "塔加洛语", "土耳其语", "鞑靼语", "乌克兰语", "乌尔都语", "乌兹别克语", "越南语", "意第绪语", "约鲁巴语", "中文", "中文繁体"]
+
+
+
+
+
+
+def format_time(seconds):
+    # 将输入的时间（秒）转换为总秒数
+    total_seconds = float(seconds)
     
+    # 计算小时、分钟和秒
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    secs = total_seconds % 60
+    
+    # 将秒拆分为整数秒和毫秒部分
+    int_secs = int(secs)
+    milliseconds = int((secs - int_secs) * 1000)
+    
+    # 格式化为00:00:00.000的形式
+    formatted_time = f"{hours:02}:{minutes:02}:{int_secs:02}.{milliseconds:03}"
+    
+    return formatted_time
 
 def transcribe(audio):
-    segments, info = model.transcribe(audio, beam_size=5, language='zh',vad_filter=True)
-    result = ','.join(segment.text for segment in segments)
-    result = convert(result, 'zh-cn')
+    lang = 'zh' if language=='zh-TW' else language
+    segments, info = model.transcribe(audio, beam_size=beam_size, language=lang,vad_filter=True)
+    result = ''
+    if(is_subtitles and not recording):
+        # result = ','.join(segment.text for segment in segments)
+        for index,segment in enumerate(segments):
+            result += f'{index+1}\r\n{format_time(segment.start)} --> {format_time(segment.end)}\r\n{segment.text}\r\n'
+    else:
+        result = ','.join(segment.text for segment in segments)
+
+    if(language=='zh'):
+        result = convert(result, 'zh-cn')
     return result
 
 
 def update_data():
     global recording
     while recording:
-        res = ','.join(resArr)
-        yield res
-        time.sleep(0.2)  # 每秒更新
+        text = ','.join(text_arr)
+        yield text
+        time.sleep(0.5)  # 每秒更新
 
 def ai_summary(transcription):
     # AI总结逻辑，这里对转录结果进行总结
     return f"总结: {transcription[:50]}..."  # 示例总结逻辑
-
-
-audio_file = None
-audio_stream_data = None
-
-data_queue = queue.Queue()
 
 # 假设 audio_stream 是一个形状为 (48000, ) 的 numpy 数组
 def resample_audio(audio_stream, sample_rate):
@@ -96,11 +141,11 @@ def transcribe_process():
             if(len(speech_chunks)):
                 transcribe_frames = collect_chunks(total_frames, [speech_chunks[0]])
                 res = transcribe(transcribe_frames)
-                if len(resArr):resArr.pop() 
-                resArr.append(res)
+                if len(text_arr):text_arr.pop() 
+                text_arr.append(res)
                 if(len(speech_chunks)>1):
                     total_frames = total_frames[speech_chunks[1]['start']:]
-                    resArr.append("....")
+                    text_arr.append("....")
     
 def input_audio_change(data):
     global audio_stream_data, audio_file
@@ -129,26 +174,26 @@ def input_audio_change(data):
 
 def start_recording():
     print("start_recording")
-    global audio_file, audio_stream_data,recording,total_frames,resArr
+    global audio_file, audio_stream_data,recording,total_frames,text_arr
     total_frames = np.array([], dtype=np.float32)
-    resArr = []
+    text_arr = []
     recording = True
     audio_file = av.open("./temp.wav", mode="w")
     audio_stream_data = audio_file.add_stream("pcm_s16le", rate=48000,channels = 1)
     threading.Thread(target=transcribe_process, daemon=True).start()
-    for res in update_data():
-        yield res
+    for text in update_data():
+        yield text
 
 def stop_recording():
     global audio_stream_data,recording,audio_file
     print("stop_recording")
-    time.sleep(2)
+    time.sleep(1)
     recording = False
     audio_file.close()
     return "./temp.wav"
 
 def file_uploaded(file):
-    global resArr
+    global text_arr
     if(not file): return
     container = av.open(file.name)
     
@@ -175,7 +220,7 @@ def file_uploaded(file):
     container = None
     save2wav(audio_data=audio_data,sample_rate=sample_rate)
     text = transcribe("temp.wav")
-    resArr = [text]
+    text_arr = [text]
     output_wav_path = "temp.wav"
     return output_wav_path, text
 
@@ -210,22 +255,37 @@ def save2wav(audio_data, sample_rate,output_path="temp.wav"):
 
 def re_transcribe():
     return transcribe("temp.wav")
-     
-css = """
-        button {
-            height:100%
-        }
-        """
+
+def settings_change(beam_size_v,language_index_v,is_subtitles_v):
+    global beam_size,language,is_subtitles,language_arr
+    beam_size = beam_size_v
+    language = language_arr[language_index_v]
+    is_subtitles = is_subtitles_v
+def language_value():
+    global language,language_arr,language_label
+    return language_label[language_arr.index(language)]
+
+md_notice = "检测到你的计算机CUDA可用,已经为你切换到GPU模式" if cuda_available else "检测到你的计算机CUDA不可用,已经为你切换到CPU模式;该模式速度较慢,实时转录可能无法流畅使用"
 with gr.Blocks() as iface:
-    gr.Markdown("<h4>GitHub仓库地址(欢迎star):<a href='https://github.com/caiwuu?tab=repositories'>https://github.com/caiwuu?tab=repositories</a></h4>")
+    gr.Markdown("<h4>GitHub仓库地址(欢迎star,欢迎贡献代码):<a href='https://github.com/caiwuu/Voice2Text'>https://github.com/caiwuu/Voice2Text</a></h4>")
+    gr.Markdown(f"<h4 style='color:green'>{md_notice}</h4>")
     with gr.Row():
         input_record = gr.Audio(label="实时转录",sources=["microphone"], streaming=True)
-        upload_file = gr.File(label="上传音频或者视频")  
+        upload_file = gr.File(label="上传音频或者视频")
+        with gr.Column():
+            beam_size_slider = gr.Slider(2, 10,step=1.0, value=beam_size,info="增加可提高识别率，也会牺牲性能", label="beam_size",interactive=True,)
+            language_label_selector = gr.Dropdown(language_label,type="index", value=language_value, label="输出语言",interactive=True)
+            output_type_checkbox  = gr.Checkbox(label="字幕格式",value=is_subtitles, interactive=True,info="实时转录无法使字幕格式")
+            beam_size_slider.change(settings_change,inputs=[beam_size_slider,language_label_selector,output_type_checkbox])
+            language_label_selector.change(settings_change,inputs=[beam_size_slider,language_label_selector,output_type_checkbox])
+            output_type_checkbox.change(settings_change,inputs=[beam_size_slider,language_label_selector,output_type_checkbox])
     
     with gr.Row():
         with gr.Column():
             play_audio = gr.Audio(label="提取音频", type="filepath")
-    regen = gr.Button("重新转录")
+
+    with gr.Row():
+        regen = gr.Button("重新转录")
             
     output_text = gr.Textbox(label="转录结果", interactive=True)            
 
