@@ -7,6 +7,9 @@ import queue
 import gradio as gr
 import av
 import subprocess
+import requests
+import json
+
 def check_cuda_available():
     try:
         result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
@@ -40,9 +43,10 @@ text_arr = []
 beam_size = 5
 language = "zh"
 is_subtitles = True,
+ai_srvice = 'http://gpt.wyzhp.site/backend-anon/conversations'
 language_arr = ["af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo", "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw", "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja", "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo", "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt", "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq", "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yi", "yo", "zh", "zh-TW"]
 language_label = ["南非荷兰语", "阿姆哈拉语", "阿拉伯语", "阿萨姆语", "阿塞拜疆语", "巴什基尔语", "白俄罗斯语", "保加利亚语", "孟加拉语", "藏语", "布列塔尼语", "波斯尼亚语", "加泰罗尼亚语", "捷克语", "威尔士语", "丹麦语", "德语", "希腊语", "英语", "西班牙语", "爱沙尼亚语", "巴斯克语", "波斯语", "芬兰语", "法罗语", "法语", "加利西亚语", "古吉拉特语", "豪萨语", "夏威夷语", "希伯来语", "印地语", "克罗地亚语", "海地克里奥尔语", "匈牙利语", "亚美尼亚语", "印度尼西亚语", "冰岛语", "意大利语", "日语", "爪哇语", "格鲁吉亚语", "哈萨克语", "高棉语", "卡纳达语", "韩语", "拉丁语", "卢森堡语", "林加拉语", "老挝语", "立陶宛语", "拉脱维亚语", "马达加斯加语", "毛利语", "马其顿语", "马拉雅拉姆语", "蒙古语", "马拉地语", "马来语", "马耳他语", "缅甸语", "尼泊尔语", "荷兰语", "挪威语（新挪威语）", "挪威语", "奥克西唐语", "旁遮普语", "波兰语", "普什图语", "葡萄牙语", "罗马尼亚语", "俄语", "梵语", "信德语", "僧伽罗语", "斯洛伐克语", "斯洛文尼亚语", "修纳语", "索马里语", "阿尔巴尼亚语", "塞尔维亚语", "巽他语", "瑞典语", "斯瓦希里语", "泰米尔语", "泰卢固语", "塔吉克语", "泰语", "土库曼语", "塔加洛语", "土耳其语", "鞑靼语", "乌克兰语", "乌尔都语", "乌兹别克语", "越南语", "意第绪语", "约鲁巴语", "中文", "中文繁体"]
-
+sys_prompt = "用户给你提供的是语音识别的一些文字，这些文字可能存在断句问题和错别字。错别字可能是识别成拼音相近的字了，请你从读音和上下文，对它进行修复，直接返回修复结果，语言类型保持和用户的一致"
 
 
 
@@ -73,7 +77,7 @@ def transcribe(audio):
     if(is_subtitles and not recording):
         # result = ','.join(segment.text for segment in segments)
         for index,segment in enumerate(segments):
-            result += f'{index+1}\r\n{format_time(segment.start)} --> {format_time(segment.end)}\r\n{segment.text}\r\n'
+            result += f'{index+1}\r\n{format_time(segment.start)} --> {format_time(segment.end)}\r\n{segment.text}\r\n\r\n'
     else:
         result = ','.join(segment.text for segment in segments)
 
@@ -89,9 +93,39 @@ def update_data():
         yield text
         time.sleep(0.5)  # 每秒更新
 
-def ai_summary(transcription):
-    # AI总结逻辑，这里对转录结果进行总结
-    return f"总结: {transcription[:50]}..."  # 示例总结逻辑
+def ai_summary(text):
+    ai_text = ''
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer eyJhbGciOiJSUzI1NiIsInR5c'
+    }
+    data = {
+            "messages":  [
+                {
+                    "role":"system",
+                    "content": sys_prompt
+                },
+                {
+                    "role":"user",
+                    "content": text
+                }
+            ],
+            "model": "gpt-4o-mini",
+            "stream":True
+    }
+    response = requests.post(ai_srvice, headers=headers, json=data)
+    # 如果使用流模式，你需要逐步读取响应
+    try:
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                if(line[6]=='{'):
+                    ai_text += json.loads(line[6:])["choices"][0]["delta"].get("content",'')
+                    yield ai_text
+    except Exception as e:
+        print(e)
+        yield "调用AI服务发送错误"
+
 
 # 假设 audio_stream 是一个形状为 (48000, ) 的 numpy 数组
 def resample_audio(audio_stream, sample_rate):
@@ -264,6 +298,9 @@ def settings_change(beam_size_v,language_index_v,is_subtitles_v):
 def language_value():
     global language,language_arr,language_label
     return language_label[language_arr.index(language)]
+def sys_prompt_change(prompt):
+    global sys_prompt
+    sys_prompt = prompt
 
 md_notice = "检测到你的计算机CUDA可用,已经为你切换到GPU模式" if cuda_available else "检测到你的计算机CUDA不可用,已经为你切换到CPU模式;该模式速度较慢,实时转录可能无法流畅使用"
 with gr.Blocks() as iface:
@@ -285,14 +322,16 @@ with gr.Blocks() as iface:
             play_audio = gr.Audio(label="提取音频", type="filepath")
 
     with gr.Row():
-        regen = gr.Button("重新转录")
+        regen = gr.Button("重新转录",variant="primary")
             
     output_text = gr.Textbox(label="转录结果", interactive=True)            
 
-    summary_button = gr.Button("AI总结")
-    summary_output = gr.Textbox(label="AI 总结结果", interactive=True)
+    summary_button = gr.Button("AI润色",variant="primary")
+    prompt_text = gr.Textbox(label="提示词", interactive=True,value=sys_prompt) 
+    summary_output = gr.Textbox(label="AI 润色结果", interactive=True)
     summary_button.click(ai_summary,inputs=output_text,outputs=summary_output)
 
+    prompt_text.change(sys_prompt_change,inputs=[prompt_text])
     regen.click(re_transcribe,outputs=output_text)
     upload_file.upload(file_uploaded, inputs=upload_file, outputs=[play_audio,output_text])
     input_record.change(input_audio_change, inputs=input_record)
