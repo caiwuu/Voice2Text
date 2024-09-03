@@ -304,8 +304,8 @@ def sys_prompt_change(prompt):
 
 md_notice = "检测到你的计算机CUDA可用,已经为你切换到GPU模式" if cuda_available else "检测到你的计算机CUDA不可用,已经为你切换到CPU模式;该模式速度较慢,实时转录可能无法流畅使用"
 with gr.Blocks() as iface:
-    gr.Markdown("<h4>GitHub仓库地址(欢迎star,欢迎贡献代码):<a href='https://github.com/caiwuu/Voice2Text'>https://github.com/caiwuu/Voice2Text</a></h4>")
-    gr.Markdown(f"<h4 style='color:green'>{md_notice}</h4>")
+    gr.Markdown("<h4>GitHub仓库地址(欢迎star、贡献代码)：<a href='https://github.com/caiwuu/Voice2Text'>Voice2Text</a>；模型仓库：<a href='https://huggingface.co/Systran'>https://huggingface.co/Systran</a></h4>")
+    gr.Markdown(f"<h4>{md_notice}</h4>")
     with gr.Row():
         input_record = gr.Audio(label="实时转录",sources=["microphone"], streaming=True)
         upload_file = gr.File(label="上传音频或者视频")

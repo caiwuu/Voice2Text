@@ -31,4 +31,4 @@ pip install -r requirements.txt
 python webUI.py
 ```
 
-![image-20240902014651428](https://cdn.jsdelivr.net/gh/caiwuu/image/202409020146577.png)
+![image-20240903122554629](https://cdn.jsdelivr.net/gh/caiwuu/image/202409031225743.png)
