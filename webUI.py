@@ -23,8 +23,6 @@ def check_cuda_available():
         print("CUDA is not available.")
         return False
 
-
-
 cuda_available = check_cuda_available()
 # 加载模型
 path = "./models/faster-whisper-large-v2"
@@ -47,9 +45,6 @@ ai_srvice = 'http://gpt.wyzhp.site/backend-anon/conversations'
 language_arr = ["af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo", "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw", "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja", "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo", "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt", "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq", "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yi", "yo", "zh", "zh-TW"]
 language_label = ["南非荷兰语", "阿姆哈拉语", "阿拉伯语", "阿萨姆语", "阿塞拜疆语", "巴什基尔语", "白俄罗斯语", "保加利亚语", "孟加拉语", "藏语", "布列塔尼语", "波斯尼亚语", "加泰罗尼亚语", "捷克语", "威尔士语", "丹麦语", "德语", "希腊语", "英语", "西班牙语", "爱沙尼亚语", "巴斯克语", "波斯语", "芬兰语", "法罗语", "法语", "加利西亚语", "古吉拉特语", "豪萨语", "夏威夷语", "希伯来语", "印地语", "克罗地亚语", "海地克里奥尔语", "匈牙利语", "亚美尼亚语", "印度尼西亚语", "冰岛语", "意大利语", "日语", "爪哇语", "格鲁吉亚语", "哈萨克语", "高棉语", "卡纳达语", "韩语", "拉丁语", "卢森堡语", "林加拉语", "老挝语", "立陶宛语", "拉脱维亚语", "马达加斯加语", "毛利语", "马其顿语", "马拉雅拉姆语", "蒙古语", "马拉地语", "马来语", "马耳他语", "缅甸语", "尼泊尔语", "荷兰语", "挪威语（新挪威语）", "挪威语", "奥克西唐语", "旁遮普语", "波兰语", "普什图语", "葡萄牙语", "罗马尼亚语", "俄语", "梵语", "信德语", "僧伽罗语", "斯洛伐克语", "斯洛文尼亚语", "修纳语", "索马里语", "阿尔巴尼亚语", "塞尔维亚语", "巽他语", "瑞典语", "斯瓦希里语", "泰米尔语", "泰卢固语", "塔吉克语", "泰语", "土库曼语", "塔加洛语", "土耳其语", "鞑靼语", "乌克兰语", "乌尔都语", "乌兹别克语", "越南语", "意第绪语", "约鲁巴语", "中文", "中文繁体"]
 sys_prompt = "用户给你提供的是语音识别的一些文字，这些文字可能存在断句问题和错别字。错别字可能是识别成拼音相近的字了，请你从读音和上下文，对它进行修复，直接返回修复结果，语言类型保持和用户的一致"
-
-
-
 
 
 def format_time(seconds):
@@ -226,66 +221,45 @@ def stop_recording():
     audio_file.close()
     return "./temp.wav"
 
+def save_to_pcm_s16le(input_file, output_file):
+    # 打开输入 FLAC 文件
+    input_container = av.open(input_file)
+
+    # 获取输入音频流的采样率
+    audio_stream = input_container.streams.audio[0]
+    sample_rate = audio_stream.rate
+
+    # 创建输出 WAV 文件
+    output_container = av.open(output_file, 'w', format='wav')
+
+    # 创建输出流，使用输入流的采样率
+    output_stream = output_container.add_stream('pcm_s16le', rate=sample_rate)
+
+    # 解码并编码每一帧
+    for frame in input_container.decode(audio=0):
+        # 将帧转换为 PCM S16LE
+        packet = output_stream.encode(frame)
+
+        # 写入输出文件
+        if packet:
+            output_container.mux(packet)
+
+    # 结束编码
+    packet = output_stream.encode(None)
+    if packet:
+        output_container.mux(packet)
+
+    # 关闭文件
+    input_container.close()
+    output_container.close()
+
 def file_uploaded(file):
     global text_arr
-    if(not file): return
-    container = av.open(file.name)
-    
-    # 查找音频流
-    audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
-    if not audio_stream:
-        raise ValueError("未找到音频流。")
-    # 音频参数
-    sample_rate = audio_stream.rate
-    # 准备音频数据列表
-    audio_data = []
-
-    # 提取音频帧
-    for frames in container.decode(audio_stream):
-        samples = frames.to_ndarray()
-        # 处理单声道或双声道
-        if samples.shape[0] == 1:  # 单声道
-            audio_data.append(samples)
-        elif samples.shape[0] >= 2:  # 双声道
-            audio_data.append(samples[0, :][np.newaxis, :])  # 只取左声道
-
-    # 将音频数据拼接成一个 NumPy 数组
-    audio_data = np.concatenate(audio_data, axis=1)
-    container = None
-    save2wav(audio_data=audio_data,sample_rate=sample_rate)
+    save_to_pcm_s16le(file.name,'temp.wav')
     text = transcribe("temp.wav")
     text_arr = [text]
     output_wav_path = "temp.wav"
     return output_wav_path, text
-
-        
-
-def save2wav(audio_data, sample_rate,output_path="temp.wav"):
-    audio_file = av.open(output_path, mode="w")
-    audio_stream_data = audio_file.add_stream("pcm_s16le", rate=sample_rate, channels=1)
-    # 规范化音频数据
-    if(audio_data.dtype=="float32"):
-        audio_data = np.clip(audio_data, -1.0, 1.0)  # 确保在范围内
-        audio_data = (audio_data*32767).astype(np.int16)  # 转换为 int16
-    else:
-        audio_data = (audio_data).astype(np.int16)
-
-    # 写入音频流
-    frame_size = 24000  # 每次写入的数据块大小（样本数）
-    for start in range(0, len(audio_data), frame_size):
-        end = min(start + frame_size, len(audio_data))
-        chunk = audio_data[start:end].reshape(-1, 1).T  # 保持为单声道
-
-        # 创建一个 AVFrame 来存储音频数据
-        frame = av.AudioFrame.from_ndarray(chunk, layout = 'mono')
-        frame.sample_rate = sample_rate
-
-        # 编码并写入音频帧
-        packet = audio_stream_data.encode(frame)
-        if packet:
-            audio_file.mux(packet)
-
-    audio_file.close()
 
 def re_transcribe():
     return transcribe("temp.wav")
@@ -295,9 +269,11 @@ def settings_change(beam_size_v,language_index_v,is_subtitles_v):
     beam_size = beam_size_v
     language = language_arr[language_index_v]
     is_subtitles = is_subtitles_v
+
 def language_value():
     global language,language_arr,language_label
     return language_label[language_arr.index(language)]
+
 def sys_prompt_change(prompt):
     global sys_prompt
     sys_prompt = prompt
