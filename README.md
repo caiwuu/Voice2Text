@@ -2,6 +2,12 @@
 ### Voice2Text是一款基于OpenAI whisper的语音转文字应用，支持音频、视频、实时语音转文字
 
 ### 使用方法
+#### 方法一
+1. 下载整合包[Voice2Text-pkg.rar](https://github.com/caiwuu/Voice2Text/releases/tag/1.0.0 )，然后解压
+2. 去 [模型仓库](https://huggingface.co/Systran) 下载 faster-whisper-large-v2 模型放到models文件夹中
+3. windows 双击run.bat  linux/mac 双击run.sh 运行
+4. 要使用GPU的自己下载安装CUDA12（方法二也一样）
+#### 方法二
 
 1.拉取代码
 
