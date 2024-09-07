@@ -1,4 +1,8 @@
 # Voice2Text
+> ### 语言
+> - [中文](README.md)
+> - [English](README_EN.md)
+
 ### Voice2Text是一款基于OpenAI whisper的语音转文字应用，支持音频、视频、实时语音转文字
 
 ### 使用方法
